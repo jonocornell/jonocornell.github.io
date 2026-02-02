@@ -1,0 +1,263 @@
+<!DOCTYPE html>
+<html lang="en-AU">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>BudgetBud | Secure Cloud Sync</title>
+    <script src="https://accounts.google.com/gsi/client" async defer></script>
+    <script src="https://apis.google.com/js/api.js" async defer></script>
+    <style>
+        :root { --primary: #2ecc71; --dark: #2c3e50; --danger: #e74c3c; --google-blue: #4285F4; }
+        body { font-family: -apple-system, system-ui, sans-serif; padding: 20px; background: #f8f9fa; color: var(--dark); line-height: 1.5; }
+        .container { max-width: 500px; margin: auto; }
+        .card { background: white; padding: 20px; border-radius: 16px; box-shadow: 0 4px 20px rgba(0,0,0,0.05); margin-bottom: 20px; }
+        h1 { color: var(--primary); text-align: center; margin-bottom: 5px; }
+        .sync-bar { display: flex; gap: 10px; margin-bottom: 20px; }
+        .btn { border: none; border-radius: 10px; padding: 12px; font-weight: bold; cursor: pointer; color: white; width: 100%; transition: opacity 0.2s; }
+        .btn-sync { background: var(--google-blue); display: block !important; }
+        .btn-main { background: var(--primary); margin-top: 10px; }
+        .btn-del { background: var(--danger); padding: 5px 10px; width: auto; }
+        .input-group { margin-bottom: 12px; }
+        label { display: block; font-size: 0.8em; font-weight: 600; color: #7f8c8d; margin-bottom: 4px; }
+        input, select { width: 100%; padding: 12px; border: 1px solid #dfe6e9; border-radius: 10px; box-sizing: border-box; font-size: 16px; }
+        .bill-item { display: flex; justify-content: space-between; align-items: center; padding: 10px; border-bottom: 1px solid #eee; }
+        .forecast-row { display: flex; justify-content: space-between; padding: 10px; border-bottom: 1px solid #f1f2f6; font-size: 0.9em; }
+        .neg { background: #fff5f5; color: var(--danger); font-weight: bold; }
+        .scroll-area { max-height: 350px; overflow-y: auto; background: white; border-radius: 10px; }
+        #status { font-size: 0.8em; text-align: center; color: #95a5a6; margin-bottom: 15px; background: #eee; padding: 5px; border-radius: 5px; }
+    </style>
+</head>
+<body>
+
+<div class="container">
+    <h1>BudgetBud</h1>
+    <div id="status">Status: Waiting for Google Library...</div>
+
+    <div class="sync-bar">
+        <button id="auth_btn" class="btn btn-sync" onclick="handleAuthClick()">Cloud Login</button>
+        <button id="sync_btn" class="btn btn-sync" onclick="syncToDrive()" style="display:none; background:#34a853;">Save to Drive</button>
+    </div>
+
+    <div class="card">
+        <h2>Setup</h2>
+        <div class="input-group"><label>Bank Balance ($)</label><input type="number" id="startBalance" step="0.01"></div>
+        <div class="input-group"><label>Net Pay ($)</label><input type="number" id="payAmount"></div>
+        <div class="input-group"><label>Next Pay Date</label><input type="date" id="nextPayDate"></div>
+    </div>
+
+    <div class="card">
+        <h3>Add Bill</h3>
+        <input type="text" id="billName" placeholder="Name" class="input-group">
+        <input type="number" id="billAmount" placeholder="Amount" class="input-group">
+        <select id="billFreq" class="input-group">
+            <option value="7">Weekly</option>
+            <option value="14">Fortnightly</option>
+            <option value="30">Monthly</option>
+            <option value="90">Quarterly</option>
+        </select>
+        <input type="date" id="billDate" class="input-group">
+        <button onclick="addBill()" class="btn" style="background:var(--dark)">Add Bill</button>
+        <div id="billListUI"></div>
+    </div>
+
+    <button onclick="calculateForecast()" class="btn btn-main">Run 90-Day Forecast</button>
+    <div id="forecastResults" class="scroll-area card" style="margin-top:20px; padding:0;"></div>
+</div>
+
+<script>
+    /* CONFIGURATION */
+    const CLIENT_ID = 'YOUR_CLIENT_ID_HERE'; // <--- PASTE YOUR CLIENT ID HERE
+    const SCOPES = 'https://www.googleapis.com/auth/drive.file';
+    let tokenClient;
+    let accessToken = null;
+
+    let bills = JSON.parse(localStorage.getItem('BudgetBud_bills')) || [];
+
+    window.onload = () => {
+        try {
+            tokenClient = google.accounts.oauth2.initTokenClient({
+                client_id: CLIENT_ID,
+                scope: SCOPES,
+                callback: (tokenResponse) => {
+                    if (tokenResponse.error !== undefined) {
+                        throw tokenResponse;
+                    }
+                    accessToken = tokenResponse.access_token;
+                    document.getElementById('auth_btn').innerText = "Logged In";
+                    document.getElementById('sync_btn').style.display = "block";
+                    document.getElementById('status').innerText = "Status: Cloud Connected";
+                    pullFromDrive();
+                },
+            });
+            document.getElementById('status').innerText = "Status: Local Mode (Ready to Login)";
+        } catch (err) {
+            document.getElementById('status').innerText = "Status: Error loading Google Login";
+            console.error(err);
+        }
+        loadLocal();
+    };
+
+    function loadLocal() {
+        document.getElementById('startBalance').value = localStorage.getItem('BudgetBud_startBal') || '';
+        document.getElementById('payAmount').value = localStorage.getItem('BudgetBud_payAmt') || '';
+        document.getElementById('nextPayDate').value = localStorage.getItem('BudgetBud_payDate') || '';
+        renderBills();
+    }
+
+    function saveLocal() {
+        localStorage.setItem('BudgetBud_bills', JSON.stringify(bills));
+        localStorage.setItem('BudgetBud_startBal', document.getElementById('startBalance').value);
+        localStorage.setItem('BudgetBud_payAmt', document.getElementById('payAmount').value);
+        localStorage.setItem('BudgetBud_payDate', document.getElementById('nextPayDate').value);
+    }
+
+    /* GOOGLE DRIVE SYNC LOGIC */
+    function handleAuthClick() {
+        if (!tokenClient) {
+            alert("Google identity services not yet loaded. Please refresh.");
+            return;
+        }
+        tokenClient.requestAccessToken({prompt: 'consent'});
+    }
+
+    async function syncToDrive() {
+        if (!accessToken) return alert("Please Login First");
+        document.getElementById('status').innerText = "Status: Syncing...";
+        
+        const content = {
+            bills: bills,
+            balance: document.getElementById('startBalance').value,
+            pay: document.getElementById('payAmount').value,
+            payDate: document.getElementById('nextPayDate').value
+        };
+
+        const fileContent = JSON.stringify(content);
+        const fileMetadata = { name: 'budgetbud_data.json', mimeType: 'application/json' };
+
+        try {
+            const searchRes = await fetch(`https://www.googleapis.com/drive/v3/files?q=name='budgetbud_data.json' and trashed=false`, {
+                headers: { 'Authorization': `Bearer ${accessToken}` }
+            });
+            const searchData = await searchRes.json();
+            
+            let url = 'https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart';
+            let method = 'POST';
+
+            if (searchData.files && searchData.files.length > 0) {
+                const fileId = searchData.files[0].id;
+                url = `https://www.googleapis.com/upload/drive/v3/files/${fileId}?uploadType=multipart`;
+                method = 'PATCH';
+            }
+
+            const formData = new FormData();
+            formData.append("metadata", new Blob([JSON.stringify(fileMetadata)], { type: 'application/json' }));
+            formData.append("file", new Blob([fileContent], { type: 'application/json' }));
+
+            const response = await fetch(url, { method: method, headers: { 'Authorization': `Bearer ${accessToken}` }, body: formData });
+            if (response.ok) {
+                document.getElementById('status').innerText = "Status: Saved to Cloud";
+            } else {
+                throw new Error("Failed to save");
+            }
+        } catch (err) {
+            document.getElementById('status').innerText = "Status: Sync Error";
+            console.error(err);
+        }
+    }
+
+    async function pullFromDrive() {
+        try {
+            const searchRes = await fetch(`https://www.googleapis.com/drive/v3/files?q=name='budgetbud_data.json' and trashed=false&fields=files(id)`, {
+                headers: { 'Authorization': `Bearer ${accessToken}` }
+            });
+            const searchData = await searchRes.json();
+            if (searchData.files && searchData.files.length > 0) {
+                const fileId = searchData.files[0].id;
+                const fileRes = await fetch(`https://www.googleapis.com/drive/v3/files/${fileId}?alt=media`, {
+                    headers: { 'Authorization': `Bearer ${accessToken}` }
+                });
+                const cloudData = await fileRes.json();
+                bills = cloudData.bills || [];
+                document.getElementById('startBalance').value = cloudData.balance || '';
+                document.getElementById('payAmount').value = cloudData.pay || '';
+                document.getElementById('nextPayDate').value = cloudData.payDate || '';
+                saveLocal();
+                renderBills();
+                document.getElementById('status').innerText = "Status: Cloud Data Loaded";
+            }
+        } catch (err) {
+            console.error("No cloud file found or error pulling", err);
+        }
+    }
+
+    /* CORE BUDGET LOGIC */
+    function addBill() {
+        const name = document.getElementById('billName').value;
+        const amount = parseFloat(document.getElementById('billAmount').value);
+        const freq = parseInt(document.getElementById('billFreq').value);
+        const date = document.getElementById('billDate').value;
+        if (!name || isNaN(amount) || !date) return;
+
+        bills.push({ name, amount, freq, nextDate: date });
+        saveLocal();
+        renderBills();
+        document.getElementById('billName').value = '';
+        document.getElementById('billAmount').value = '';
+    }
+
+    function deleteBill(index) {
+        bills.splice(index, 1);
+        saveLocal();
+        renderBills();
+    }
+
+    function renderBills() {
+        const ui = document.getElementById('billListUI');
+        ui.innerHTML = bills.length ? '<h4 style="margin:10px 0 5px;">Active Bills</h4>' : '';
+        bills.forEach((b, i) => {
+            const div = document.createElement('div');
+            div.className = 'bill-item';
+            div.innerHTML = `<span>${b.name} ($${b.amount})</span> <button onclick="deleteBill(${i})" class="btn btn-del">X</button>`;
+            ui.appendChild(div);
+        });
+    }
+
+    function calculateForecast() {
+        saveLocal();
+        let bal = parseFloat(document.getElementById('startBalance').value) || 0;
+        const pay = parseFloat(document.getElementById('payAmount').value) || 0;
+        const pDate = new Date(document.getElementById('nextPayDate').value);
+        const results = document.getElementById('forecastResults');
+        results.innerHTML = "";
+
+        if (isNaN(pDate.getTime())) return alert("Set a Pay Date");
+
+        let current = new Date();
+        let tempBills = JSON.parse(JSON.stringify(bills)).map(b => { b.nextDate = new Date(b.nextDate); return b; });
+
+        for (let i = 0; i < 90; i++) {
+            let note = "";
+            const daysToPay = Math.floor((current - pDate) / (1000 * 60 * 60 * 24));
+            if (daysToPay >= 0 && daysToPay % 14 === 0) {
+                bal += pay;
+                note = `<b style="color:var(--primary)">+[Pay]</b>`;
+            }
+
+            tempBills.forEach(b => {
+                if (current.toDateString() === b.nextDate.toDateString()) {
+                    bal -= b.amount;
+                    note += ` <span>[${b.name}]</span>`;
+                    b.nextDate.setDate(b.nextDate.getDate() + b.freq);
+                }
+            });
+
+            const row = document.createElement('div');
+            row.className = `forecast-row ${bal < 0 ? 'neg' : ''}`;
+            row.innerHTML = `<span>${current.toLocaleDateString('en-AU', {day:'2-digit', month:'short'})}</span> <small>${note}</small> <span>$${bal.toFixed(2)}</span>`;
+            results.appendChild(row);
+            current.setDate(current.getDate() + 1);
+        }
+    }
+</script>
+</body>
+</html>
