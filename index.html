@@ -44,6 +44,13 @@
         .health-badge { display: inline-block; padding: 4px 12px; border-radius: 20px; color: white; font-weight: bold; font-size: 0.8em; margin-bottom: 10px; }
         .week-block { border-left: 4px solid var(--primary); padding-left: 10px; margin-bottom: 15px; }
         .week-title { font-weight: bold; color: var(--primary); font-size: 0.9em; margin-bottom: 5px; }
+        canvas { width: 100% !important; height: 300px !important; }
+
+        /* Payday Modal */
+        .modal-overlay { position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.8); z-index: 1000; display: flex; align-items: center; justify-content: center; }
+        .modal { background: var(--card-bg); padding: 25px; border-radius: 16px; width: 90%; max-width: 400px; text-align: center; box-shadow: 0 10px 30px rgba(0,0,0,0.3); }
+        .modal h2 { margin-top: 0; color: var(--primary); }
+        .modal p { color: var(--text); opacity: 0.8; margin-bottom: 20px; }
     </style>
 </head>
 <body>
@@ -65,11 +72,20 @@
         </div>
 
         <div class="card">
-            <h2>Setup</h2>
+            <h2>Setup & Pay</h2>
             <div class="input-group"><label>Bank Balance ($)</label><input type="number" id="startBalance" step="0.01" onchange="renderBills()"></div>
-            <div class="input-group"><label>Net Pay ($)</label><input type="number" id="payAmount" onchange="renderBills()"></div>
+            <div class="input-group"><label>Estimated Net Pay ($)</label><input type="number" id="payAmount" onchange="renderBills()"></div>
+            <div class="input-group">
+                <label>Pay Frequency</label>
+                <select id="payFreq" onchange="renderBills()">
+                    <option value="7">Weekly</option>
+                    <option value="14" selected>Fortnightly</option>
+                    <option value="30">Monthly</option>
+                </select>
+            </div>
             <div class="input-group"><label>Next Pay Date</label><input type="date" id="nextPayDate"></div>
         </div>
+
         <div class="card">
             <h3>Add Expense</h3>
             <select id="billType" class="input-group" onchange="toggleFreq()">
@@ -118,6 +134,17 @@
     </nav>
 </div>
 
+<div id="paydayModal" class="modal-overlay" style="display:none;">
+    <div class="modal">
+        <h2>💰 It's Payday!</h2>
+        <p>You expected <b>$<span id="modalExpectedPay"></span></b>.</p>
+        <label>Verify Actual Amount Received:</label>
+        <input type="number" id="modalActualPay" class="input-group" style="text-align:center; font-size:1.2em; font-weight:bold;">
+        <button onclick="confirmPay()" class="btn btn-main" style="margin-top:10px;">Confirm & Add to Balance</button>
+        <button onclick="closeModal()" class="btn btn-del" style="background:transparent; color:var(--text); margin-top:5px;">Not yet</button>
+    </div>
+</div>
+
 <script>
     const CLIENT_ID = '209415722638-h0br52hmiektc9tbm9fqcfkb6uhuisaa.apps.googleusercontent.com';
     const SCOPES = 'https://www.googleapis.com/auth/drive.file';
@@ -158,10 +185,60 @@
             });
         } catch (e) { console.error(e); }
         loadLocal();
+        checkPayday(); // Check if today is payday
     };
+
+    function checkPayday() {
+        const pDateStr = document.getElementById('nextPayDate').value;
+        if (!pDateStr) return;
+        
+        const today = new Date();
+        today.setHours(0,0,0,0);
+        const pDate = new Date(pDateStr);
+        pDate.setHours(0,0,0,0);
+
+        if (today >= pDate) {
+            const expected = document.getElementById('payAmount').value;
+            document.getElementById('modalExpectedPay').innerText = expected;
+            document.getElementById('modalActualPay').value = expected;
+            document.getElementById('paydayModal').style.display = 'flex';
+        }
+    }
+
+    function confirmPay() {
+        const actual = parseFloat(document.getElementById('modalActualPay').value);
+        if (isNaN(actual)) return alert("Enter valid amount");
+
+        // 1. Update Balance
+        let currentBal = parseFloat(document.getElementById('startBalance').value) || 0;
+        currentBal += actual;
+        document.getElementById('startBalance').value = currentBal.toFixed(2);
+
+        // 2. Advance Pay Date
+        const pDate = new Date(document.getElementById('nextPayDate').value);
+        const freq = parseInt(document.getElementById('payFreq').value);
+        pDate.setDate(pDate.getDate() + freq);
+        document.getElementById('nextPayDate').value = pDate.toISOString().split('T')[0];
+
+        // 3. Log to History
+        historyLog.unshift({ name: "Income (Pay)", amount: actual, type: "Income", paidDate: new Date().toLocaleDateString('en-AU') });
+        
+        saveLocal();
+        renderHistory();
+        renderBills(); // Re-calc health
+        document.getElementById('paydayModal').style.display = 'none';
+        alert(`$${actual} added to balance! Next pay set to ${pDate.toLocaleDateString('en-AU')}`);
+    }
+
+    function closeModal() {
+        document.getElementById('paydayModal').style.display = 'none';
+    }
+
+    /* EXISTING FUNCTIONS BELOW (No Changes needed to logic, just references) */
 
     function updateHealthScore(monthlyTotal) {
         const payAmount = parseFloat(document.getElementById('payAmount').value) || 0;
+        const payFreq = parseInt(document.getElementById('payFreq').value) || 14;
         const healthCard = document.getElementById('healthCard');
         const healthScore = document.getElementById('healthScore');
         const healthText = document.getElementById('healthText');
@@ -169,7 +246,12 @@
         if (payAmount <= 0) { healthCard.style.display = "none"; return; }
         healthCard.style.display = "block";
 
-        const monthlyIncome = payAmount * 2.16; // Assumes fortnightly pay. Adjust to *4.33 if weekly.
+        // Calculate Monthly Income based on frequency
+        let monthlyIncome = 0;
+        if (payFreq === 7) monthlyIncome = payAmount * 4.33;
+        else if (payFreq === 14) monthlyIncome = payAmount * 2.16;
+        else if (payFreq === 30) monthlyIncome = payAmount;
+
         const ratio = (monthlyTotal / monthlyIncome) * 100;
 
         let grade = "F", color = "#e74c3c", tip = "Bills are consuming your income.";
@@ -205,13 +287,14 @@
         const ctx = document.getElementById('budgetChart').getContext('2d');
         let bal = parseFloat(document.getElementById('startBalance').value) || 0;
         const pay = parseFloat(document.getElementById('payAmount').value) || 0;
+        const payFreq = parseInt(document.getElementById('payFreq').value) || 14;
         const pDate = new Date(document.getElementById('nextPayDate').value);
         if (isNaN(pDate.getTime())) return;
         let labels = [], data = [], current = new Date();
         let tempBills = JSON.parse(JSON.stringify(bills)).map(b => { b.nextDate = new Date(b.nextDate); return b; });
         for (let i = 0; i < 90; i++) {
             const diffDays = Math.floor((current - pDate) / (1000 * 60 * 60 * 24));
-            if (diffDays >= 0 && diffDays % 14 === 0) bal += pay;
+            if (diffDays >= 0 && diffDays % payFreq === 0) bal += pay;
             tempBills.forEach(b => { if (current.toDateString() === b.nextDate.toDateString()) { bal -= b.amount; if (b.freq > 0) b.nextDate.setDate(b.nextDate.getDate() + b.freq); else b.nextDate.setDate(b.nextDate.getDate() + 999); } });
             labels.push(current.toLocaleDateString('en-AU', {day:'2-digit', month:'short'})); data.push(bal); current.setDate(current.getDate() + 1);
         }
@@ -224,7 +307,7 @@
         });
     }
 
-    /* PREVIOUS CORE LOGIC FUNCTIONS */
+    /* UTILS */
     function toggleFreq() { document.getElementById('freqContainer').style.display = document.getElementById('billType').value === 'once-off' ? 'none' : 'block'; }
     function addBill() {
         const name = document.getElementById('billName').value, amount = parseFloat(document.getElementById('billAmount').value);
@@ -248,14 +331,14 @@
         f.forEach(h => { const div = document.createElement('div'); div.className = 'bill-item'; div.innerHTML = `<div class="bill-info"><span class="bill-type-tag">Paid ${h.paidDate}</span><span>${h.name} ($${h.amount})</span></div>`; ui.appendChild(div); });
     }
     function calculateForecast() {
-        saveLocal(); let bal = parseFloat(document.getElementById('startBalance').value) || 0, pay = parseFloat(document.getElementById('payAmount').value) || 0, pDate = new Date(document.getElementById('nextPayDate').value), res = document.getElementById('weeklyResults');
+        saveLocal(); let bal = parseFloat(document.getElementById('startBalance').value) || 0, pay = parseFloat(document.getElementById('payAmount').value) || 0, payFreq = parseInt(document.getElementById('payFreq').value) || 14, pDate = new Date(document.getElementById('nextPayDate').value), res = document.getElementById('weeklyResults');
         res.innerHTML = ""; if (isNaN(pDate.getTime())) return;
         let curr = new Date(), temp = JSON.parse(JSON.stringify(bills)).map(b => { b.nextDate = new Date(b.nextDate); return b; });
         for (let w = 0; w < 12; w++) {
             let weekHTML = `<div class="week-block"><div class="week-title">Week ${w+1}</div>`;
             for (let d = 0; d < 7; d++) {
                 let n = ""; const diff = Math.floor((curr - pDate) / (1000 * 60 * 60 * 24));
-                if (diff >= 0 && diff % 14 === 0) { bal += pay; n = `<b>+[Pay]</b>`; }
+                if (diff >= 0 && diff % payFreq === 0) { bal += pay; n = `<b>+[Pay]</b>`; }
                 temp.forEach(b => { if (curr.toDateString() === b.nextDate.toDateString()) { bal -= b.amount; n += ` [${b.name}]`; if (b.freq > 0) b.nextDate.setDate(b.nextDate.getDate() + b.freq); else b.nextDate.setDate(b.nextDate.getDate() + 999); } });
                 if (n) weekHTML += `<div class="forecast-row"><span>${curr.toLocaleDateString('en-AU', {day:'2-digit', month:'short'})}</span> <small>${n}</small> <span>$${bal.toFixed(0)}</span></div>`;
                 curr.setDate(curr.getDate() + 1);
@@ -267,11 +350,15 @@
         document.getElementById('startBalance').value = localStorage.getItem('BudgetBud_startBal') || '';
         document.getElementById('payAmount').value = localStorage.getItem('BudgetBud_payAmt') || '';
         document.getElementById('nextPayDate').value = localStorage.getItem('BudgetBud_payDate') || '';
+        document.getElementById('payFreq').value = localStorage.getItem('BudgetBud_payFreq') || '14';
         renderBills(); renderHistory();
     }
     function saveLocal() {
         localStorage.setItem('BudgetBud_bills', JSON.stringify(bills)); localStorage.setItem('BudgetBud_history', JSON.stringify(historyLog));
-        localStorage.setItem('BudgetBud_startBal', document.getElementById('startBalance').value); localStorage.setItem('BudgetBud_payAmt', document.getElementById('payAmount').value); localStorage.setItem('BudgetBud_payDate', document.getElementById('nextPayDate').value);
+        localStorage.setItem('BudgetBud_startBal', document.getElementById('startBalance').value); 
+        localStorage.setItem('BudgetBud_payAmt', document.getElementById('payAmount').value); 
+        localStorage.setItem('BudgetBud_payDate', document.getElementById('nextPayDate').value);
+        localStorage.setItem('BudgetBud_payFreq', document.getElementById('payFreq').value);
     }
     function deleteBill(index) { bills.splice(index, 1); saveLocal(); renderBills(); }
     function clearHistory() { if(confirm("Clear history?")) { historyLog = []; saveLocal(); renderHistory(); } }
@@ -283,7 +370,7 @@
     function handleAuthClick() { tokenClient.requestAccessToken({prompt: 'consent'}); }
     async function syncToDrive() {
         if (!accessToken) return;
-        const content = { bills, historyLog, balance: document.getElementById('startBalance').value, pay: document.getElementById('payAmount').value, payDate: document.getElementById('nextPayDate').value };
+        const content = { bills, historyLog, balance: document.getElementById('startBalance').value, pay: document.getElementById('payAmount').value, payDate: document.getElementById('nextPayDate').value, payFreq: document.getElementById('payFreq').value };
         try {
             const searchRes = await fetch(`https://www.googleapis.com/drive/v3/files?q=name='budgetbud_data.json' and trashed=false`, { headers: { 'Authorization': `Bearer ${accessToken}` } });
             const searchData = await searchRes.json();
@@ -307,8 +394,10 @@
                 document.getElementById('startBalance').value = cloudData.balance || '';
                 document.getElementById('payAmount').value = cloudData.pay || '';
                 document.getElementById('nextPayDate').value = cloudData.payDate || '';
+                document.getElementById('payFreq').value = cloudData.payFreq || '14';
                 saveLocal(); renderBills(); renderHistory();
                 document.getElementById('status').innerText = "Status: Cloud Data Loaded";
+                checkPayday(); // Re-check payday after cloud load
             }
         } catch (e) { console.error(e); }
     }
