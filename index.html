@@ -4,23 +4,32 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>BudgetBud | Cloud Sync</title>
-    <script src="https://accounts.google.com/gsi/client" async defer></script>
-    <script src="https://apis.google.com/js/api.js" async defer></script>
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <style>
-        :root { 
-            --primary: #2ecc71; --dark: #2c3e50; --danger: #e74c3c; --google-blue: #4285F4; --warning: #f1c40f;
-            --bg: #f8f9fa; --card-bg: #ffffff; --text: #2c3e50; --border: #dfe6e9; --summary: #f1f2f6;
+        :root {
+            --primary: #2ecc71;
+            --dark: #2c3e50;
+            --danger: #e74c3c;
+            --google-blue: #4285F4;
+            --bg: #f8f9fa;
+            --card-bg: #ffffff;
+            --text: #2c3e50;
+            --border: #dfe6e9;
+            --summary: #f1f2f6;
         }
         [data-theme="dark"] {
-            --bg: #1a1a1a; --card-bg: #2d2d2d; --text: #f8f9fa; --border: #444; --summary: #3d3d3d;
+            --bg: #1a1a1a;
+            --card-bg: #2d2d2d;
+            --text: #f8f9fa;
+            --border: #444;
+            --summary: #3d3d3d;
         }
-        body { font-family: -apple-system, system-ui, sans-serif; padding: 10px 10px 80px 10px; background: var(--bg); color: var(--text); line-height: 1.5; transition: background 0.3s; }
+        body { font-family: -apple-system, system-ui, sans-serif; padding: 10px 10px 80px; background: var(--bg); color: var(--text); line-height: 1.5; }
         .container { max-width: 500px; margin: auto; position: relative; }
         .card { background: var(--card-bg); padding: 20px; border-radius: 16px; box-shadow: 0 4px 20px rgba(0,0,0,0.1); margin-bottom: 20px; }
         h1 { color: var(--primary); text-align: center; margin-bottom: 5px; }
         .sync-bar { display: flex; gap: 10px; margin-bottom: 20px; }
-        .btn { border: none; border-radius: 10px; padding: 12px; font-weight: bold; cursor: pointer; color: white; width: 100%; transition: opacity 0.2s; font-size: 14px; }
+        .btn { border: none; border-radius: 10px; padding: 12px; font-weight: bold; cursor: pointer; color: white; width: 100%; font-size: 14px; }
         .btn-sync { background: var(--google-blue); }
         .btn-main { background: var(--primary); margin-top: 10px; width: 100%; }
         .btn-del { background: var(--danger); padding: 5px 8px; width: auto; font-size: 11px; margin-left: 5px; }
@@ -28,13 +37,14 @@
         .input-group { margin-bottom: 12px; }
         label { display: block; font-size: 0.8em; font-weight: 600; color: #7f8c8d; margin-bottom: 4px; }
         input, select { width: 100%; padding: 12px; border: 1px solid var(--border); border-radius: 10px; box-sizing: border-box; font-size: 16px; background: var(--card-bg); color: var(--text); }
-        .bill-item { display: flex; justify-content: space-between; align-items: center; padding: 12px 0; border-bottom: 1px solid var(--border); }
-        .bill-info { display: flex; flex-direction: column; flex-grow: 1; }
+        .bill-item { display: flex; justify-content: space-between; align-items: center; gap: 8px; padding: 12px 0; border-bottom: 1px solid var(--border); }
+        .bill-info { display: flex; flex-direction: column; flex-grow: 1; min-width: 0; }
         .bill-type-tag { font-size: 0.7em; text-transform: uppercase; color: #95a5a6; font-weight: bold; }
-        .forecast-row { display: flex; justify-content: space-between; padding: 10px; border-bottom: 1px solid var(--border); font-size: 0.9em; }
-        .neg { background: rgba(231, 76, 60, 0.1); color: var(--danger); font-weight: bold; }
+        .forecast-row { display: flex; justify-content: space-between; padding: 10px; border-bottom: 1px solid var(--border); font-size: 0.9em; gap: 8px; }
         .scroll-area { max-height: 400px; overflow-y: auto; background: var(--card-bg); border-radius: 10px; }
-        #status { font-size: 0.7em; text-align: center; color: #95a5a6; margin-bottom: 15px; background: var(--summary); padding: 5px; border-radius: 5px; }
+        #status { font-size: 0.75em; text-align: center; margin-bottom: 15px; background: var(--summary); padding: 6px; border-radius: 5px; }
+        #status.status-error { color: #fff; background: var(--danger); }
+        #status.status-success { color: #fff; background: #34a853; }
         .theme-toggle { position: absolute; top: 0; right: 0; background: none; border: none; font-size: 1.2rem; cursor: pointer; padding: 10px; color: var(--text); }
         .tab-bar { position: fixed; bottom: 0; left: 0; right: 0; background: var(--card-bg); display: flex; justify-content: space-around; padding: 10px; border-top: 1px solid var(--border); box-shadow: 0 -2px 10px rgba(0,0,0,0.05); }
         .tab-btn { background: none; border: none; color: #95a5a6; font-size: 0.7em; font-weight: bold; cursor: pointer; display: flex; flex-direction: column; align-items: center; }
@@ -45,17 +55,18 @@
         .week-block { border-left: 4px solid var(--primary); padding-left: 10px; margin-bottom: 15px; }
         .week-title { font-weight: bold; color: var(--primary); font-size: 0.9em; margin-bottom: 5px; }
         canvas { width: 100% !important; height: 300px !important; }
-
-        /* Payday Modal */
-        .modal-overlay { position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.8); z-index: 1000; display: flex; align-items: center; justify-content: center; }
+        .modal-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.8); z-index: 1000; display: flex; align-items: center; justify-content: center; }
         .modal { background: var(--card-bg); padding: 25px; border-radius: 16px; width: 90%; max-width: 400px; text-align: center; box-shadow: 0 10px 30px rgba(0,0,0,0.3); }
         .modal h2 { margin-top: 0; color: var(--primary); }
-        .modal p { color: var(--text); opacity: 0.8; margin-bottom: 20px; }
+        .modal p { margin-bottom: 16px; }
+        .splash-lock { backdrop-filter: blur(3px); }
+        .splash-sub { font-size: 0.9em; opacity: 0.85; margin-top: 8px; }
+        #cloudLoginModal { z-index: 20000; }
+        body.app-locked { overflow: hidden; }
     </style>
 </head>
-<body>
-
-<div class="container">
+<body class="app-locked">
+<div class="container" id="appShell" style="display:none;">
     <button class="theme-toggle" onclick="toggleTheme()" id="themeBtn">🌙</button>
     <h1>BudgetBud</h1>
     <div id="status">Status: Waiting for Google...</div>
@@ -64,8 +75,9 @@
         <div class="sync-bar">
             <button id="auth_btn" class="btn btn-sync" onclick="handleAuthClick()">Cloud Login</button>
             <button id="sync_btn" class="btn btn-sync" onclick="syncToDrive()" style="display:none; background:#34a853;">Save to Drive</button>
+            <button id="logout_btn" class="btn btn-sync" onclick="logoutAndReset()" style="display:none; background:#e67e22;">Log Out</button>
         </div>
-        
+
         <div class="card" id="healthCard" style="text-align: center; display:none;">
             <div id="healthScore" class="health-badge"></div>
             <div id="healthText" style="font-size: 0.85em; opacity: 0.8;"></div>
@@ -145,262 +157,724 @@
     </div>
 </div>
 
+<div id="cloudLoginModal" class="modal-overlay splash-lock" style="display:flex;">
+    <div class="modal">
+        <h2>🔒 Login Required</h2>
+        <p id="cloudLoginText">Sign in with Google Drive to continue to BudgetBud.</p>
+        <button id="cloudLoginBtn" onclick="handleAuthClick()" class="btn btn-sync" disabled>Loading Google...</button>
+        <p class="splash-sub" id="cloudLoginHint">The app unlocks after successful Google login.</p>
+    </div>
+</div>
+
 <script>
-    const CLIENT_ID = '209415722638-h0br52hmiektc9tbm9fqcfkb6uhuisaa.apps.googleusercontent.com';
-    const SCOPES = 'https://www.googleapis.com/auth/drive.file';
-    let tokenClient, accessToken = null, myChart = null;
-    let bills = JSON.parse(localStorage.getItem('BudgetBud_bills')) || [];
-    let historyLog = JSON.parse(localStorage.getItem('BudgetBud_history')) || [];
+const CLIENT_ID = '209415722638-h0br52hmiektc9tbm9fqcfkb6uhuisaa.apps.googleusercontent.com';
+const SCOPES = 'https://www.googleapis.com/auth/drive.file';
+const STORAGE_KEYS = {
+    bills: 'BudgetBud_bills', history: 'BudgetBud_history', startBal: 'BudgetBud_startBal',
+    payAmt: 'BudgetBud_payAmt', payDate: 'BudgetBud_payDate', payFreq: 'BudgetBud_payFreq',
+    theme: 'BudgetBud_theme', paydayPromptDate: 'BudgetBud_lastPaydayPrompt'
+};
 
-    function showPage(pageId, btn) {
-        document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
-        document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
-        document.getElementById(pageId).classList.add('active');
-        btn.classList.add('active');
+let tokenClient = null;
+let accessToken = null;
+let myChart = null;
+let bills = [];
+let historyLog = [];
+let gsiScriptRequested = false;
+let authInitTimer = null;
+
+function loadGoogleIdentityScript() {
+    if (window.google?.accounts?.oauth2) return;
+    if (gsiScriptRequested) return;
+
+    gsiScriptRequested = true;
+    const script = document.createElement('script');
+    script.src = 'https://accounts.google.com/gsi/client';
+    script.async = true;
+    script.defer = true;
+    script.onload = () => {
+        gsiScriptRequested = false;
+        initGoogleAuth();
+    };
+    script.onerror = () => {
+        gsiScriptRequested = false;
+        document.getElementById('cloudLoginHint').innerText = 'Unable to reach Google. Check internet and retry.';
+        setCloudLoginButtonState(true, 'Retry Google Login');
+        setStatus('Google login script failed to load.', 'error');
+    };
+    document.head.appendChild(script);
+}
+
+function showCloudLoginPrompt(message) {
+    if (message) document.getElementById('cloudLoginText').innerText = message;
+    document.body.classList.add('app-locked');
+    document.getElementById('appShell').style.display = 'none';
+    document.getElementById('cloudLoginModal').style.display = 'flex';
+}
+
+function closeCloudLoginPrompt() {
+    document.getElementById('cloudLoginModal').style.display = 'none';
+    document.body.classList.remove('app-locked');
+    document.getElementById('appShell').style.display = 'block';
+}
+
+function updateAuthUi(isLoggedIn) {
+    document.getElementById('auth_btn').innerText = isLoggedIn ? 'Logged In' : 'Cloud Login';
+    document.getElementById('sync_btn').style.display = isLoggedIn ? 'block' : 'none';
+    document.getElementById('logout_btn').style.display = isLoggedIn ? 'block' : 'none';
+}
+
+
+function setCloudLoginButtonState(ready, label) {
+    const btn = document.getElementById('cloudLoginBtn');
+    if (!btn) return;
+    btn.disabled = !ready;
+    btn.innerText = label || (ready ? 'Login with Google to Continue' : 'Loading Google...');
+    btn.style.opacity = ready ? '1' : '0.7';
+}
+
+function scheduleAuthInitRetry() {
+    if (authInitTimer) return;
+    authInitTimer = setTimeout(() => {
+        authInitTimer = null;
+        initGoogleAuth();
+    }, 500);
+}
+
+function initGoogleAuth() {
+    if (tokenClient) {
+        setCloudLoginButtonState(true);
+        return;
     }
 
-    function toggleTheme() {
-        const target = document.documentElement.getAttribute('data-theme') === 'dark' ? 'light' : 'dark';
-        document.documentElement.setAttribute('data-theme', target);
-        localStorage.setItem('BudgetBud_theme', target);
-        document.getElementById('themeBtn').innerText = target === 'dark' ? '☀️' : '🌙';
-        if(myChart) updateChart();
+    if (!(window.google && google.accounts && google.accounts.oauth2)) {
+        setCloudLoginButtonState(false);
+        document.getElementById('cloudLoginHint').innerText = 'Preparing Google login...';
+        loadGoogleIdentityScript();
+        scheduleAuthInitRetry();
+        return;
     }
 
-    const savedTheme = localStorage.getItem('BudgetBud_theme') || 'light';
-    document.documentElement.setAttribute('data-theme', savedTheme);
+    try {
+        tokenClient = google.accounts.oauth2.initTokenClient({
+            client_id: CLIENT_ID,
+            scope: SCOPES,
+            callback: (resp) => {
+                if (!resp || resp.error || !resp.access_token) {
+                    setStatus('Login failed. Please try again.', 'error');
+                    document.getElementById('cloudLoginHint').innerText = 'Login was cancelled or failed. Try again.';
+                    setCloudLoginButtonState(true, 'Retry Google Login');
+                    return;
+                }
 
-    window.onload = () => {
-        document.getElementById('themeBtn').innerText = savedTheme === 'dark' ? '☀️' : '🌙';
-        try {
-            tokenClient = google.accounts.oauth2.initTokenClient({
-                client_id: CLIENT_ID, scope: SCOPES,
-                callback: (resp) => {
-                    accessToken = resp.access_token;
-                    document.getElementById('auth_btn').innerText = "Logged In";
-                    document.getElementById('sync_btn').style.display = "block";
-                    document.getElementById('status').innerText = "Status: Cloud Connected";
-                    pullFromDrive();
-                },
+                accessToken = resp.access_token;
+                updateAuthUi(true);
+                closeCloudLoginPrompt();
+                setStatus('Cloud Connected', 'success');
+                pullFromDrive();
+            }
+        });
+        document.getElementById('cloudLoginHint').innerText = 'Google login is ready.';
+        setCloudLoginButtonState(true);
+    } catch (e) {
+        console.error(e);
+        tokenClient = null;
+        document.getElementById('cloudLoginHint').innerText = 'Google login setup failed. Tap to retry.';
+        setCloudLoginButtonState(true, 'Retry Google Login');
+        setStatus('Google auth setup failed. Retry.', 'error');
+    }
+}
+
+function setStatus(text, type = 'neutral') {
+    const el = document.getElementById('status');
+    el.innerText = `Status: ${text}`;
+    el.classList.remove('status-error', 'status-success');
+    if (type === 'error') el.classList.add('status-error');
+    if (type === 'success') el.classList.add('status-success');
+}
+
+function safeJsonParse(raw, fallback) {
+    try {
+        const parsed = JSON.parse(raw);
+        return parsed ?? fallback;
+    } catch {
+        return fallback;
+    }
+}
+
+function isIsoDate(value) {
+    return typeof value === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(value) && !Number.isNaN(new Date(value).getTime());
+}
+
+function normalizeBill(raw) {
+    if (!raw || typeof raw !== 'object') return null;
+    const name = String(raw.name || '').trim();
+    const amount = Number(raw.amount);
+    const type = raw.type === 'once-off' ? 'once-off' : 'recurring';
+    const freq = type === 'once-off' ? 0 : Number(raw.freq);
+    const nextDate = String(raw.nextDate || '');
+    const allowedFreq = [7, 14, 30, 90];
+    if (!name || !Number.isFinite(amount) || amount <= 0 || !isIsoDate(nextDate)) return null;
+    if (type === 'recurring' && !allowedFreq.includes(freq)) return null;
+    return { name, amount, type, freq, nextDate };
+}
+
+function normalizeHistoryItem(raw) {
+    if (!raw || typeof raw !== 'object') return null;
+    const name = String(raw.name || '').trim();
+    const amount = Number(raw.amount);
+    const type = String(raw.type || 'Expense');
+    const paidDate = String(raw.paidDate || '');
+    if (!name || !Number.isFinite(amount) || !paidDate) return null;
+    return { name, amount, type, paidDate };
+}
+
+function formatDateISO(d) {
+    const dt = new Date(d);
+    if (Number.isNaN(dt.getTime())) return '';
+    dt.setHours(12, 0, 0, 0);
+    return dt.toISOString().split('T')[0];
+}
+
+function showPage(pageId, btn) {
+    document.querySelectorAll('.page').forEach((p) => p.classList.remove('active'));
+    document.querySelectorAll('.tab-btn').forEach((b) => b.classList.remove('active'));
+    document.getElementById(pageId).classList.add('active');
+    btn.classList.add('active');
+}
+
+function toggleTheme() {
+    const current = document.documentElement.getAttribute('data-theme') || 'light';
+    const target = current === 'dark' ? 'light' : 'dark';
+    document.documentElement.setAttribute('data-theme', target);
+    localStorage.setItem(STORAGE_KEYS.theme, target);
+    document.getElementById('themeBtn').innerText = target === 'dark' ? '☀️' : '🌙';
+    if (myChart) updateChart();
+}
+
+function updateHealthScore(monthlyTotal) {
+    const payAmount = Number(document.getElementById('payAmount').value) || 0;
+    const payFreq = Number(document.getElementById('payFreq').value) || 14;
+    const healthCard = document.getElementById('healthCard');
+    const healthScore = document.getElementById('healthScore');
+    const healthText = document.getElementById('healthText');
+
+    if (payAmount <= 0) {
+        healthCard.style.display = 'none';
+        return;
+    }
+    healthCard.style.display = 'block';
+
+    const monthlyIncome = payFreq === 7 ? payAmount * 4.33 : payFreq === 14 ? payAmount * 2.16 : payAmount;
+    if (!monthlyIncome) {
+        healthCard.style.display = 'none';
+        return;
+    }
+
+    const ratio = (monthlyTotal / monthlyIncome) * 100;
+    let grade = 'Score: F';
+    let color = '#e74c3c';
+    let tip = 'Bills are consuming your income.';
+
+    if (ratio < 30) { grade = 'Score: A'; color = '#2ecc71'; tip = 'Excellent overhead!'; }
+    else if (ratio < 50) { grade = 'Score: B'; color = '#3498db'; tip = 'Solid budget balance.'; }
+    else if (ratio < 70) { grade = 'Score: C'; color = '#f1c40f'; tip = 'Tight overhead, watch spending.'; }
+    else if (ratio < 90) { grade = 'Score: D'; color = '#e67e22'; tip = 'High bills relative to pay.'; }
+
+    healthScore.innerText = grade;
+    healthScore.style.backgroundColor = color;
+    healthText.innerText = `${ratio.toFixed(0)}% of income goes to recurring bills. ${tip}`;
+}
+
+function renderBills() {
+    const ui = document.getElementById('billListUI');
+    ui.innerHTML = '';
+
+    if (bills.length) {
+        const heading = document.createElement('h4');
+        heading.style.margin = '15px 0 5px';
+        heading.innerText = 'Upcoming';
+        ui.appendChild(heading);
+    }
+
+    let monthlyTotal = 0;
+    bills.forEach((b, i) => {
+        const div = document.createElement('div');
+        div.className = 'bill-item';
+
+        const info = document.createElement('div');
+        info.className = 'bill-info';
+
+        const tag = document.createElement('span');
+        tag.className = 'bill-type-tag';
+        tag.innerText = b.type;
+
+        const line = document.createElement('span');
+        line.innerText = `${b.name} ($${b.amount})`;
+        line.style.fontWeight = '600';
+
+        const actions = document.createElement('div');
+
+        const paidBtn = document.createElement('button');
+        paidBtn.className = 'btn btn-pay';
+        paidBtn.innerText = 'Paid';
+        paidBtn.onclick = () => markAsPaid(i);
+
+        const delBtn = document.createElement('button');
+        delBtn.className = 'btn btn-del';
+        delBtn.innerText = 'X';
+        delBtn.onclick = () => deleteBill(i);
+
+        actions.append(paidBtn, delBtn);
+        info.append(tag, line);
+        div.append(info, actions);
+        ui.appendChild(div);
+
+        if (b.type === 'recurring') {
+            if (b.freq === 7) monthlyTotal += b.amount * 4.33;
+            else if (b.freq === 14) monthlyTotal += b.amount * 2.16;
+            else if (b.freq === 30) monthlyTotal += b.amount;
+            else if (b.freq === 90) monthlyTotal += b.amount / 3;
+        }
+    });
+
+    updateHealthScore(monthlyTotal);
+}
+
+function addBill() {
+    const name = document.getElementById('billName').value.trim();
+    const amount = Number(document.getElementById('billAmount').value);
+    const type = document.getElementById('billType').value;
+    const freq = type === 'once-off' ? 0 : Number(document.getElementById('billFreq').value);
+    const date = document.getElementById('billDate').value;
+
+    if (!name || !Number.isFinite(amount) || amount <= 0 || !isIsoDate(date)) {
+        alert('Please enter a valid name, amount, and date.');
+        return;
+    }
+
+    if (type === 'recurring' && ![7, 14, 30, 90].includes(freq)) {
+        alert('Invalid recurring frequency selected.');
+        return;
+    }
+
+    bills.push({ name, amount, type, freq, nextDate: date });
+    saveLocal();
+    renderBills();
+    document.getElementById('billName').value = '';
+    document.getElementById('billAmount').value = '';
+}
+
+function markAsPaid(index) {
+    const item = bills[index];
+    if (!item) return;
+
+    historyLog.unshift({ ...item, paidDate: new Date().toLocaleDateString('en-AU') });
+
+    if (item.type === 'once-off') {
+        bills.splice(index, 1);
+    } else {
+        const d = new Date(item.nextDate);
+        d.setDate(d.getDate() + item.freq);
+        bills[index].nextDate = formatDateISO(d);
+    }
+
+    saveLocal();
+    renderBills();
+    renderHistory();
+}
+
+function renderHistory() {
+    const ui = document.getElementById('historyListUI');
+    const stats = document.getElementById('historyStats');
+    const search = document.getElementById('historySearch').value.toLowerCase();
+    const filtered = historyLog.filter((h) => h.name.toLowerCase().includes(search));
+
+    stats.innerHTML = filtered.length ? `Total: $${filtered.reduce((sum, x) => sum + x.amount, 0).toFixed(2)}` : '';
+    ui.innerHTML = '';
+
+    if (!filtered.length) {
+        const p = document.createElement('p');
+        p.style.textAlign = 'center';
+        p.innerText = 'No records.';
+        ui.appendChild(p);
+        return;
+    }
+
+    filtered.forEach((h) => {
+        const div = document.createElement('div');
+        div.className = 'bill-item';
+
+        const info = document.createElement('div');
+        info.className = 'bill-info';
+
+        const tag = document.createElement('span');
+        tag.className = 'bill-type-tag';
+        tag.innerText = `Paid ${h.paidDate}`;
+
+        const text = document.createElement('span');
+        text.innerText = `${h.name} ($${h.amount})`;
+
+        info.append(tag, text);
+        div.appendChild(info);
+        ui.appendChild(div);
+    });
+}
+
+function toggleFreq() {
+    document.getElementById('freqContainer').style.display = document.getElementById('billType').value === 'once-off' ? 'none' : 'block';
+}
+
+function deleteBill(index) {
+    bills.splice(index, 1);
+    saveLocal();
+    renderBills();
+}
+
+function clearHistory() {
+    if (!confirm('Clear history?')) return;
+    historyLog = [];
+    saveLocal();
+    renderHistory();
+}
+
+function exportHistory() {
+    let csv = 'Name,Amount,Type,Paid Date\n';
+    historyLog.forEach((h) => { csv += `"${h.name}",${h.amount},"${h.type}","${h.paidDate}"\n`; });
+    const blob = new Blob([csv], { type: 'text/csv' });
+    const url = window.URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `History_${new Date().toLocaleDateString('en-AU')}.csv`;
+    a.click();
+    window.URL.revokeObjectURL(url);
+}
+
+function updateChart() {
+    const ctx = document.getElementById('budgetChart').getContext('2d');
+    let bal = Number(document.getElementById('startBalance').value) || 0;
+    const pay = Number(document.getElementById('payAmount').value) || 0;
+    const payFreq = Number(document.getElementById('payFreq').value) || 14;
+    const pDate = new Date(document.getElementById('nextPayDate').value);
+    if (Number.isNaN(pDate.getTime())) return;
+
+    const labels = [];
+    const data = [];
+    let current = new Date();
+    const tempBills = bills.map((b) => ({ ...b, nextDate: new Date(b.nextDate) }));
+
+    for (let i = 0; i < 90; i++) {
+        const diffDays = Math.floor((current - pDate) / (1000 * 60 * 60 * 24));
+        if (diffDays >= 0 && diffDays % payFreq === 0) bal += pay;
+
+        tempBills.forEach((b) => {
+            if (current.toDateString() === b.nextDate.toDateString()) {
+                bal -= b.amount;
+                if (b.freq > 0) b.nextDate.setDate(b.nextDate.getDate() + b.freq);
+                else b.nextDate.setDate(b.nextDate.getDate() + 999);
+            }
+        });
+
+        labels.push(current.toLocaleDateString('en-AU', { day: '2-digit', month: 'short' }));
+        data.push(bal);
+        current.setDate(current.getDate() + 1);
+    }
+
+    if (myChart) myChart.destroy();
+    const isDark = document.documentElement.getAttribute('data-theme') === 'dark';
+    myChart = new Chart(ctx, {
+        type: 'line',
+        data: {
+            labels,
+            datasets: [
+                { label: 'Balance', data, borderColor: '#2ecc71', pointRadius: 0, fill: false },
+                { label: 'Zero', data: new Array(90).fill(0), borderColor: '#e74c3c', borderDash: [5, 5], pointRadius: 0 }
+            ]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            scales: {
+                y: { grid: { color: isDark ? '#444' : '#eee' } },
+                x: { grid: { display: false } }
+            },
+            plugins: { legend: { display: false } }
+        }
+    });
+}
+
+function calculateForecast() {
+    saveLocal();
+    let bal = Number(document.getElementById('startBalance').value) || 0;
+    const pay = Number(document.getElementById('payAmount').value) || 0;
+    const payFreq = Number(document.getElementById('payFreq').value) || 14;
+    const pDate = new Date(document.getElementById('nextPayDate').value);
+    const res = document.getElementById('weeklyResults');
+    res.innerHTML = '';
+    if (Number.isNaN(pDate.getTime())) return;
+
+    let curr = new Date();
+    const temp = bills.map((b) => ({ ...b, nextDate: new Date(b.nextDate) }));
+
+    for (let w = 0; w < 12; w++) {
+        const block = document.createElement('div');
+        block.className = 'week-block';
+
+        const title = document.createElement('div');
+        title.className = 'week-title';
+        title.innerText = `Week ${w + 1}`;
+        block.appendChild(title);
+
+        for (let d = 0; d < 7; d++) {
+            let noteParts = [];
+            const diff = Math.floor((curr - pDate) / (1000 * 60 * 60 * 24));
+            if (diff >= 0 && diff % payFreq === 0) {
+                bal += pay;
+                noteParts.push('+[Pay]');
+            }
+
+            temp.forEach((b) => {
+                if (curr.toDateString() === b.nextDate.toDateString()) {
+                    bal -= b.amount;
+                    noteParts.push(`[${b.name}]`);
+                    if (b.freq > 0) b.nextDate.setDate(b.nextDate.getDate() + b.freq);
+                    else b.nextDate.setDate(b.nextDate.getDate() + 999);
+                }
             });
-        } catch (e) { console.error(e); }
-        loadLocal();
-        checkPayday(); // Check if today is payday
+
+            if (noteParts.length) {
+                const row = document.createElement('div');
+                row.className = 'forecast-row';
+
+                const dateEl = document.createElement('span');
+                dateEl.innerText = curr.toLocaleDateString('en-AU', { day: '2-digit', month: 'short' });
+
+                const noteEl = document.createElement('small');
+                noteEl.innerText = noteParts.join(' ');
+
+                const balEl = document.createElement('span');
+                balEl.innerText = `$${bal.toFixed(0)}`;
+
+                row.append(dateEl, noteEl, balEl);
+                block.appendChild(row);
+            }
+
+            curr.setDate(curr.getDate() + 1);
+        }
+
+        const footer = document.createElement('div');
+        footer.style.textAlign = 'right';
+        footer.style.fontSize = '0.8em';
+        footer.style.padding = '5px';
+        footer.innerText = `End: $${bal.toFixed(0)}`;
+        block.appendChild(footer);
+        res.appendChild(block);
+    }
+}
+
+function checkPayday() {
+    const pDateStr = document.getElementById('nextPayDate').value;
+    if (!isIsoDate(pDateStr)) return;
+
+    const today = formatDateISO(new Date());
+    const pDate = formatDateISO(new Date(pDateStr));
+    const lastPrompted = localStorage.getItem(STORAGE_KEYS.paydayPromptDate);
+
+    if (today >= pDate && lastPrompted !== today) {
+        const expected = document.getElementById('payAmount').value;
+        document.getElementById('modalExpectedPay').innerText = expected;
+        document.getElementById('modalActualPay').value = expected;
+        document.getElementById('paydayModal').style.display = 'flex';
+        localStorage.setItem(STORAGE_KEYS.paydayPromptDate, today);
+    }
+}
+
+function confirmPay() {
+    const actual = Number(document.getElementById('modalActualPay').value);
+    if (!Number.isFinite(actual) || actual <= 0) return alert('Enter valid amount');
+
+    let currentBal = Number(document.getElementById('startBalance').value) || 0;
+    currentBal += actual;
+    document.getElementById('startBalance').value = currentBal.toFixed(2);
+
+    const pDate = new Date(document.getElementById('nextPayDate').value);
+    const freq = Number(document.getElementById('payFreq').value) || 14;
+    pDate.setDate(pDate.getDate() + freq);
+    document.getElementById('nextPayDate').value = formatDateISO(pDate);
+
+    historyLog.unshift({ name: 'Income (Pay)', amount: actual, type: 'Income', paidDate: new Date().toLocaleDateString('en-AU') });
+    saveLocal();
+    renderHistory();
+    renderBills();
+    document.getElementById('paydayModal').style.display = 'none';
+    alert(`$${actual} added to balance! Next pay set to ${pDate.toLocaleDateString('en-AU')}`);
+}
+
+function closeModal() {
+    document.getElementById('paydayModal').style.display = 'none';
+}
+
+function loadLocal() {
+    bills = safeJsonParse(localStorage.getItem(STORAGE_KEYS.bills), []).map(normalizeBill).filter(Boolean);
+    historyLog = safeJsonParse(localStorage.getItem(STORAGE_KEYS.history), []).map(normalizeHistoryItem).filter(Boolean);
+
+    document.getElementById('startBalance').value = localStorage.getItem(STORAGE_KEYS.startBal) || '';
+    document.getElementById('payAmount').value = localStorage.getItem(STORAGE_KEYS.payAmt) || '';
+    document.getElementById('nextPayDate').value = localStorage.getItem(STORAGE_KEYS.payDate) || '';
+    document.getElementById('payFreq').value = localStorage.getItem(STORAGE_KEYS.payFreq) || '14';
+
+    renderBills();
+    renderHistory();
+}
+
+function saveLocal() {
+    localStorage.setItem(STORAGE_KEYS.bills, JSON.stringify(bills));
+    localStorage.setItem(STORAGE_KEYS.history, JSON.stringify(historyLog));
+    localStorage.setItem(STORAGE_KEYS.startBal, document.getElementById('startBalance').value);
+    localStorage.setItem(STORAGE_KEYS.payAmt, document.getElementById('payAmount').value);
+    localStorage.setItem(STORAGE_KEYS.payDate, document.getElementById('nextPayDate').value);
+    localStorage.setItem(STORAGE_KEYS.payFreq, document.getElementById('payFreq').value);
+}
+
+function handleAuthClick() {
+    if (!tokenClient) {
+        setStatus('Google auth is still loading. Please wait...', 'error');
+        loadGoogleIdentityScript();
+        initGoogleAuth();
+        return;
+    }
+    tokenClient.requestAccessToken({ prompt: 'consent' });
+}
+
+async function fetchJson(url, options = {}) {
+    const res = await fetch(url, options);
+    if (!res.ok) throw new Error(`Request failed (${res.status})`);
+    return res.json();
+}
+
+async function syncToDrive() {
+    if (!accessToken) return setStatus('Please sign in before syncing.', 'error');
+
+    const content = {
+        bills,
+        historyLog,
+        balance: document.getElementById('startBalance').value,
+        pay: document.getElementById('payAmount').value,
+        payDate: document.getElementById('nextPayDate').value,
+        payFreq: document.getElementById('payFreq').value
     };
 
-    function checkPayday() {
-        const pDateStr = document.getElementById('nextPayDate').value;
-        if (!pDateStr) return;
-        
-        const today = new Date();
-        today.setHours(0,0,0,0);
-        const pDate = new Date(pDateStr);
-        pDate.setHours(0,0,0,0);
+    try {
+        setStatus('Saving to Cloud...');
+        const searchData = await fetchJson(
+            "https://www.googleapis.com/drive/v3/files?q=name='budgetbud_data.json' and trashed=false&fields=files(id)",
+            { headers: { Authorization: `Bearer ${accessToken}` } }
+        );
 
-        if (today >= pDate) {
-            const expected = document.getElementById('payAmount').value;
-            document.getElementById('modalExpectedPay').innerText = expected;
-            document.getElementById('modalActualPay').value = expected;
-            document.getElementById('paydayModal').style.display = 'flex';
+        let url = 'https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart';
+        let method = 'POST';
+        if (searchData.files && searchData.files.length > 0) {
+            url = `https://www.googleapis.com/upload/drive/v3/files/${searchData.files[0].id}?uploadType=multipart`;
+            method = 'PATCH';
         }
+
+        const formData = new FormData();
+        formData.append('metadata', new Blob([JSON.stringify({ name: 'budgetbud_data.json', mimeType: 'application/json' })], { type: 'application/json' }));
+        formData.append('file', new Blob([JSON.stringify(content)], { type: 'application/json' }));
+
+        const saveRes = await fetch(url, { method, headers: { Authorization: `Bearer ${accessToken}` }, body: formData });
+        if (!saveRes.ok) throw new Error(`Save failed (${saveRes.status})`);
+
+        setStatus('Saved to Cloud', 'success');
+    } catch (e) {
+        console.error(e);
+        setStatus('Cloud save failed. Try again.', 'error');
+    }
+}
+
+async function logoutAndReset() {
+    const logoutBtn = document.getElementById('logout_btn');
+    logoutBtn.disabled = true;
+    logoutBtn.innerText = 'Logging Out...';
+
+    if (accessToken) await syncToDrive();
+
+    const finishLogout = () => {
+        accessToken = null;
+        tokenClient = null;
+        location.reload();
+    };
+
+    try {
+        if (window.google?.accounts?.oauth2?.revoke) {
+            google.accounts.oauth2.revoke(accessToken, finishLogout);
+            return;
+        }
+    } catch (e) {
+        console.error(e);
     }
 
-    function confirmPay() {
-        const actual = parseFloat(document.getElementById('modalActualPay').value);
-        if (isNaN(actual)) return alert("Enter valid amount");
+    finishLogout();
+}
 
-        // 1. Update Balance
-        let currentBal = parseFloat(document.getElementById('startBalance').value) || 0;
-        currentBal += actual;
-        document.getElementById('startBalance').value = currentBal.toFixed(2);
+async function pullFromDrive() {
+    if (!accessToken) return;
 
-        // 2. Advance Pay Date
-        const pDate = new Date(document.getElementById('nextPayDate').value);
-        const freq = parseInt(document.getElementById('payFreq').value);
-        pDate.setDate(pDate.getDate() + freq);
-        document.getElementById('nextPayDate').value = pDate.toISOString().split('T')[0];
+    try {
+        setStatus('Loading Cloud data...');
+        const searchData = await fetchJson(
+            "https://www.googleapis.com/drive/v3/files?q=name='budgetbud_data.json' and trashed=false&fields=files(id)",
+            { headers: { Authorization: `Bearer ${accessToken}` } }
+        );
 
-        // 3. Log to History
-        historyLog.unshift({ name: "Income (Pay)", amount: actual, type: "Income", paidDate: new Date().toLocaleDateString('en-AU') });
-        
+        if (!searchData.files || searchData.files.length === 0) {
+            setStatus('Cloud connected (no existing backup found).', 'success');
+            return;
+        }
+
+        const cloudData = await fetchJson(
+            `https://www.googleapis.com/drive/v3/files/${searchData.files[0].id}?alt=media`,
+            { headers: { Authorization: `Bearer ${accessToken}` } }
+        );
+
+        bills = Array.isArray(cloudData.bills) ? cloudData.bills.map(normalizeBill).filter(Boolean) : [];
+        historyLog = Array.isArray(cloudData.historyLog) ? cloudData.historyLog.map(normalizeHistoryItem).filter(Boolean) : [];
+        document.getElementById('startBalance').value = cloudData.balance || '';
+        document.getElementById('payAmount').value = cloudData.pay || '';
+        document.getElementById('nextPayDate').value = cloudData.payDate || '';
+        document.getElementById('payFreq').value = ['7', '14', '30'].includes(String(cloudData.payFreq)) ? String(cloudData.payFreq) : '14';
+
         saveLocal();
+        renderBills();
         renderHistory();
-        renderBills(); // Re-calc health
-        document.getElementById('paydayModal').style.display = 'none';
-        alert(`$${actual} added to balance! Next pay set to ${pDate.toLocaleDateString('en-AU')}`);
+        checkPayday();
+        setStatus('Cloud Data Loaded', 'success');
+    } catch (e) {
+        console.error(e);
+        setStatus('Cloud load failed. Using local data.', 'error');
     }
+}
 
-    function closeModal() {
-        document.getElementById('paydayModal').style.display = 'none';
-    }
+window.addEventListener('pageshow', () => {
+    if (!accessToken) showCloudLoginPrompt();
+});
 
-    /* EXISTING FUNCTIONS BELOW (No Changes needed to logic, just references) */
+window.onload = () => {
+    const savedTheme = localStorage.getItem(STORAGE_KEYS.theme) || 'light';
+    document.documentElement.setAttribute('data-theme', savedTheme);
+    document.getElementById('themeBtn').innerText = savedTheme === 'dark' ? '☀️' : '🌙';
 
-    function updateHealthScore(monthlyTotal) {
-        const payAmount = parseFloat(document.getElementById('payAmount').value) || 0;
-        const payFreq = parseInt(document.getElementById('payFreq').value) || 14;
-        const healthCard = document.getElementById('healthCard');
-        const healthScore = document.getElementById('healthScore');
-        const healthText = document.getElementById('healthText');
+    updateAuthUi(false);
 
-        if (payAmount <= 0) { healthCard.style.display = "none"; return; }
-        healthCard.style.display = "block";
+    showCloudLoginPrompt();
+    setCloudLoginButtonState(false);
+    loadGoogleIdentityScript();
+    initGoogleAuth();
 
-        // Calculate Monthly Income based on frequency
-        let monthlyIncome = 0;
-        if (payFreq === 7) monthlyIncome = payAmount * 4.33;
-        else if (payFreq === 14) monthlyIncome = payAmount * 2.16;
-        else if (payFreq === 30) monthlyIncome = payAmount;
-
-        const ratio = (monthlyTotal / monthlyIncome) * 100;
-
-        let grade = "F", color = "#e74c3c", tip = "Bills are consuming your income.";
-        if (ratio < 30) { grade = "Score: A"; color = "#2ecc71"; tip = "Excellent overhead!"; }
-        else if (ratio < 50) { grade = "Score: B"; color = "#3498db"; tip = "Solid budget balance."; }
-        else if (ratio < 70) { grade = "Score: C"; color = "#f1c40f"; tip = "Tight overhead, watch spending."; }
-        else if (ratio < 90) { grade = "Score: D"; color = "#e67e22"; tip = "High bills relative to pay."; }
-
-        healthScore.innerText = grade;
-        healthScore.style.backgroundColor = color;
-        healthText.innerText = `${ratio.toFixed(0)}% of income goes to recurring bills. ${tip}`;
-    }
-
-    function renderBills() {
-        const ui = document.getElementById('billListUI');
-        ui.innerHTML = bills.length ? '<h4 style="margin:15px 0 5px;">Upcoming</h4>' : '';
-        let monthlyTotal = 0;
-        bills.forEach((b, i) => {
-            const div = document.createElement('div'); div.className = 'bill-item';
-            div.innerHTML = `<div class="bill-info"><span class="bill-type-tag">${b.type}</span><span><b>${b.name}</b> ($${b.amount})</span></div><button onclick="markAsPaid(${i})" class="btn btn-pay">Paid</button><button onclick="deleteBill(${i})" class="btn btn-del">X</button>`;
-            ui.appendChild(div);
-            if (b.type === 'recurring') {
-                if (b.freq === 7) monthlyTotal += (b.amount * 4.33);
-                else if (b.freq === 14) monthlyTotal += (b.amount * 2.16);
-                else if (b.freq === 30) monthlyTotal += b.amount;
-                else if (b.freq === 90) monthlyTotal += (b.amount / 3);
-            }
-        });
-        updateHealthScore(monthlyTotal);
-    }
-
-    function updateChart() {
-        const ctx = document.getElementById('budgetChart').getContext('2d');
-        let bal = parseFloat(document.getElementById('startBalance').value) || 0;
-        const pay = parseFloat(document.getElementById('payAmount').value) || 0;
-        const payFreq = parseInt(document.getElementById('payFreq').value) || 14;
-        const pDate = new Date(document.getElementById('nextPayDate').value);
-        if (isNaN(pDate.getTime())) return;
-        let labels = [], data = [], current = new Date();
-        let tempBills = JSON.parse(JSON.stringify(bills)).map(b => { b.nextDate = new Date(b.nextDate); return b; });
-        for (let i = 0; i < 90; i++) {
-            const diffDays = Math.floor((current - pDate) / (1000 * 60 * 60 * 24));
-            if (diffDays >= 0 && diffDays % payFreq === 0) bal += pay;
-            tempBills.forEach(b => { if (current.toDateString() === b.nextDate.toDateString()) { bal -= b.amount; if (b.freq > 0) b.nextDate.setDate(b.nextDate.getDate() + b.freq); else b.nextDate.setDate(b.nextDate.getDate() + 999); } });
-            labels.push(current.toLocaleDateString('en-AU', {day:'2-digit', month:'short'})); data.push(bal); current.setDate(current.getDate() + 1);
-        }
-        if (myChart) myChart.destroy();
-        const isDark = document.documentElement.getAttribute('data-theme') === 'dark';
-        myChart = new Chart(ctx, {
-            type: 'line',
-            data: { labels: labels, datasets: [{ label: 'Balance', data: data, borderColor: '#2ecc71', pointRadius: 0, fill: false }, { label: 'Zero', data: new Array(90).fill(0), borderColor: '#e74c3c', borderDash: [5, 5], pointRadius: 0 }] },
-            options: { responsive: true, maintainAspectRatio: false, scales: { y: { grid: { color: isDark ? '#444' : '#eee' } }, x: { grid: { display: false } } }, plugins: { legend: { display: false } } }
-        });
-    }
-
-    /* UTILS */
-    function toggleFreq() { document.getElementById('freqContainer').style.display = document.getElementById('billType').value === 'once-off' ? 'none' : 'block'; }
-    function addBill() {
-        const name = document.getElementById('billName').value, amount = parseFloat(document.getElementById('billAmount').value);
-        const type = document.getElementById('billType').value, freq = type === 'once-off' ? 0 : parseInt(document.getElementById('billFreq').value), date = document.getElementById('billDate').value;
-        if (!name || isNaN(amount) || !date) return alert("Missing info");
-        bills.push({ name, amount, type, freq, nextDate: date });
-        saveLocal(); renderBills();
-        document.getElementById('billName').value = ''; document.getElementById('billAmount').value = '';
-    }
-    function markAsPaid(index) {
-        const item = bills[index]; historyLog.unshift({ ...item, paidDate: new Date().toLocaleDateString('en-AU') });
-        if (item.type === 'once-off') bills.splice(index, 1);
-        else { let d = new Date(item.nextDate); d.setDate(d.getDate() + item.freq); bills[index].nextDate = d.toISOString().split('T')[0]; }
-        saveLocal(); renderBills(); renderHistory();
-    }
-    function renderHistory() {
-        const ui = document.getElementById('historyListUI'), stats = document.getElementById('historyStats'), s = document.getElementById('historySearch').value.toLowerCase();
-        const f = historyLog.filter(h => h.name.toLowerCase().includes(s));
-        stats.innerHTML = f.length ? `Total: $${f.reduce((sum, x) => sum + x.amount, 0).toFixed(2)}` : "";
-        ui.innerHTML = f.length ? '' : '<p style="text-align:center;">No records.</p>';
-        f.forEach(h => { const div = document.createElement('div'); div.className = 'bill-item'; div.innerHTML = `<div class="bill-info"><span class="bill-type-tag">Paid ${h.paidDate}</span><span>${h.name} ($${h.amount})</span></div>`; ui.appendChild(div); });
-    }
-    function calculateForecast() {
-        saveLocal(); let bal = parseFloat(document.getElementById('startBalance').value) || 0, pay = parseFloat(document.getElementById('payAmount').value) || 0, payFreq = parseInt(document.getElementById('payFreq').value) || 14, pDate = new Date(document.getElementById('nextPayDate').value), res = document.getElementById('weeklyResults');
-        res.innerHTML = ""; if (isNaN(pDate.getTime())) return;
-        let curr = new Date(), temp = JSON.parse(JSON.stringify(bills)).map(b => { b.nextDate = new Date(b.nextDate); return b; });
-        for (let w = 0; w < 12; w++) {
-            let weekHTML = `<div class="week-block"><div class="week-title">Week ${w+1}</div>`;
-            for (let d = 0; d < 7; d++) {
-                let n = ""; const diff = Math.floor((curr - pDate) / (1000 * 60 * 60 * 24));
-                if (diff >= 0 && diff % payFreq === 0) { bal += pay; n = `<b>+[Pay]</b>`; }
-                temp.forEach(b => { if (curr.toDateString() === b.nextDate.toDateString()) { bal -= b.amount; n += ` [${b.name}]`; if (b.freq > 0) b.nextDate.setDate(b.nextDate.getDate() + b.freq); else b.nextDate.setDate(b.nextDate.getDate() + 999); } });
-                if (n) weekHTML += `<div class="forecast-row"><span>${curr.toLocaleDateString('en-AU', {day:'2-digit', month:'short'})}</span> <small>${n}</small> <span>$${bal.toFixed(0)}</span></div>`;
-                curr.setDate(curr.getDate() + 1);
-            }
-            res.innerHTML += weekHTML + `<div style="text-align:right; font-size:0.8em; padding:5px;">End: $${bal.toFixed(0)}</div></div>`;
-        }
-    }
-    function loadLocal() {
-        document.getElementById('startBalance').value = localStorage.getItem('BudgetBud_startBal') || '';
-        document.getElementById('payAmount').value = localStorage.getItem('BudgetBud_payAmt') || '';
-        document.getElementById('nextPayDate').value = localStorage.getItem('BudgetBud_payDate') || '';
-        document.getElementById('payFreq').value = localStorage.getItem('BudgetBud_payFreq') || '14';
-        renderBills(); renderHistory();
-    }
-    function saveLocal() {
-        localStorage.setItem('BudgetBud_bills', JSON.stringify(bills)); localStorage.setItem('BudgetBud_history', JSON.stringify(historyLog));
-        localStorage.setItem('BudgetBud_startBal', document.getElementById('startBalance').value); 
-        localStorage.setItem('BudgetBud_payAmt', document.getElementById('payAmount').value); 
-        localStorage.setItem('BudgetBud_payDate', document.getElementById('nextPayDate').value);
-        localStorage.setItem('BudgetBud_payFreq', document.getElementById('payFreq').value);
-    }
-    function deleteBill(index) { bills.splice(index, 1); saveLocal(); renderBills(); }
-    function clearHistory() { if(confirm("Clear history?")) { historyLog = []; saveLocal(); renderHistory(); } }
-    function exportHistory() {
-        let csv = "Name,Amount,Type,Paid Date\n"; historyLog.forEach(h => { csv += `"${h.name}",${h.amount},"${h.type}","${h.paidDate}"\n`; });
-        const blob = new Blob([csv], { type: 'text/csv' }), url = window.URL.createObjectURL(blob), a = document.createElement('a');
-        a.href = url; a.download = `History_${new Date().toLocaleDateString('en-AU')}.csv`; a.click();
-    }
-    function handleAuthClick() { tokenClient.requestAccessToken({prompt: 'consent'}); }
-    async function syncToDrive() {
-        if (!accessToken) return;
-        const content = { bills, historyLog, balance: document.getElementById('startBalance').value, pay: document.getElementById('payAmount').value, payDate: document.getElementById('nextPayDate').value, payFreq: document.getElementById('payFreq').value };
-        try {
-            const searchRes = await fetch(`https://www.googleapis.com/drive/v3/files?q=name='budgetbud_data.json' and trashed=false`, { headers: { 'Authorization': `Bearer ${accessToken}` } });
-            const searchData = await searchRes.json();
-            let url = 'https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart', method = 'POST';
-            if (searchData.files && searchData.files.length > 0) { url = `https://www.googleapis.com/upload/drive/v3/files/${searchData.files[0].id}?uploadType=multipart`; method = 'PATCH'; }
-            const formData = new FormData();
-            formData.append("metadata", new Blob([JSON.stringify({ name: 'budgetbud_data.json', mimeType: 'application/json' })], { type: 'application/json' }));
-            formData.append("file", new Blob([JSON.stringify(content)], { type: 'application/json' }));
-            await fetch(url, { method: method, headers: { 'Authorization': `Bearer ${accessToken}` }, body: formData });
-            document.getElementById('status').innerText = "Status: Saved to Cloud";
-        } catch (e) { console.error(e); }
-    }
-    async function pullFromDrive() {
-        try {
-            const searchRes = await fetch(`https://www.googleapis.com/drive/v3/files?q=name='budgetbud_data.json' and trashed=false&fields=files(id)`, { headers: { 'Authorization': `Bearer ${accessToken}` } });
-            const searchData = await searchRes.json();
-            if (searchData.files && searchData.files.length > 0) {
-                const fileRes = await fetch(`https://www.googleapis.com/drive/v3/files/${searchData.files[0].id}?alt=media`, { headers: { 'Authorization': `Bearer ${accessToken}` } });
-                const cloudData = await fileRes.json();
-                bills = cloudData.bills || []; historyLog = cloudData.historyLog || [];
-                document.getElementById('startBalance').value = cloudData.balance || '';
-                document.getElementById('payAmount').value = cloudData.pay || '';
-                document.getElementById('nextPayDate').value = cloudData.payDate || '';
-                document.getElementById('payFreq').value = cloudData.payFreq || '14';
-                saveLocal(); renderBills(); renderHistory();
-                document.getElementById('status').innerText = "Status: Cloud Data Loaded";
-                checkPayday(); // Re-check payday after cloud load
-            }
-        } catch (e) { console.error(e); }
-    }
+    loadLocal();
+    toggleFreq();
+    checkPayday();
+};
 </script>
 </body>
 </html>
