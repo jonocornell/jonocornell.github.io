@@ -74,7 +74,6 @@
     <div id="dashboard" class="page active">
         <div class="sync-bar">
             <button id="auth_btn" class="btn btn-sync" onclick="handleAuthClick()">Cloud Login</button>
-            <button id="sync_btn" class="btn btn-sync" onclick="syncToDrive()" style="display:none; background:#34a853;">Save to Drive</button>
             <button id="logout_btn" class="btn btn-sync" onclick="logoutAndReset()" style="display:none; background:#e67e22;">Log Out</button>
         </div>
 
@@ -220,7 +219,6 @@ function closeCloudLoginPrompt() {
 
 function updateAuthUi(isLoggedIn) {
     document.getElementById('auth_btn').innerText = isLoggedIn ? 'Logged In' : 'Cloud Login';
-    document.getElementById('sync_btn').style.display = isLoggedIn ? 'block' : 'none';
     document.getElementById('logout_btn').style.display = isLoggedIn ? 'block' : 'none';
 }
 
@@ -752,8 +750,12 @@ async function fetchJson(url, options = {}) {
     return res.json();
 }
 
-async function syncToDrive() {
-    if (!accessToken) return setStatus('Please sign in before syncing.', 'error');
+async function syncToDrive(options = {}) {
+    const { silent = false, keepalive = false } = options;
+    if (!accessToken) {
+        if (!silent) setStatus('Please sign in before syncing.', 'error');
+        return;
+    }
 
     const content = {
         bills,
@@ -765,10 +767,10 @@ async function syncToDrive() {
     };
 
     try {
-        setStatus('Saving to Cloud...');
+        if (!silent) setStatus('Saving to Cloud...');
         const searchData = await fetchJson(
             "https://www.googleapis.com/drive/v3/files?q=name='budgetbud_data.json' and trashed=false&fields=files(id)",
-            { headers: { Authorization: `Bearer ${accessToken}` } }
+            { headers: { Authorization: `Bearer ${accessToken}` }, keepalive }
         );
 
         let url = 'https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart';
@@ -782,14 +784,20 @@ async function syncToDrive() {
         formData.append('metadata', new Blob([JSON.stringify({ name: 'budgetbud_data.json', mimeType: 'application/json' })], { type: 'application/json' }));
         formData.append('file', new Blob([JSON.stringify(content)], { type: 'application/json' }));
 
-        const saveRes = await fetch(url, { method, headers: { Authorization: `Bearer ${accessToken}` }, body: formData });
+        const saveRes = await fetch(url, { method, headers: { Authorization: `Bearer ${accessToken}` }, body: formData, keepalive });
         if (!saveRes.ok) throw new Error(`Save failed (${saveRes.status})`);
 
-        setStatus('Saved to Cloud', 'success');
+        if (!silent) setStatus('Saved to Cloud', 'success');
     } catch (e) {
         console.error(e);
-        setStatus('Cloud save failed. Try again.', 'error');
+        if (!silent) setStatus('Cloud save failed. Try again.', 'error');
     }
+}
+
+function syncOnAppLeave() {
+    if (!accessToken) return;
+    saveLocal();
+    syncToDrive({ silent: true, keepalive: true });
 }
 
 async function logoutAndReset() {
@@ -857,6 +865,12 @@ async function pullFromDrive() {
 
 window.addEventListener('pageshow', () => {
     if (!accessToken) showCloudLoginPrompt();
+});
+
+window.addEventListener('pagehide', syncOnAppLeave);
+
+document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState === 'hidden') syncOnAppLeave();
 });
 
 window.onload = () => {
